@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <title>Scraper ML – Acompanhamento</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+  <h2>ML Scraper – Acompanhamento</h2>
+  
+  <div class="card">
+    <h3>⚙️ Configuração Geral</h3>
+    <div class="row">
+      <input id="url" size="60" placeholder="Cole a URL da listagem (ex.: Mais vendidos)" />
+      <input id="max" type="number" value="50" min="1" max="500" placeholder="Max itens" />
+      <select id="category" style="min-width: 200px;">
+        <option value="">Selecione uma categoria</option>
+      </select>
+      <label><input type="checkbox" id="headless" checked> Modo headless</label>
+      <button id="start">▶️ Iniciar</button>
+      <button id="stop">⏹️ Parar</button>
+    </div>
+    <div class="row">
+      Status: <span id="status">parado</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>📱 Configuração Evolution API</h3>
+    <div class="row">
+      <input id="evo-url" size="40" placeholder="Base URL (ex: http://localhost:8080)" />
+      <input id="evo-key" size="30" placeholder="API Key" />
+      <input id="evo-instance" size="20" placeholder="Instance Name" />
+      <button id="save-config">💾 Salvar Config</button>
+      <button id="test-config">🔍 Testar Conexão</button>
+      <button id="debug-config">🐛 Debug API</button>
+    </div>
+    <div class="row" style="margin-top: 10px;">
+      <button id="disable-groups-ignore">🔓 Desativar groupsIgnore</button>
+      <small style="color: #666;">Nota: groupsIgnore pode impedir a listagem de grupos</small>
+    </div>
+  </div>
+  <div class="card">
+    <h3>📋 Log de Execução</h3>
+    <div id="log"></div>
+  </div>
+
+  <div class="card">
+    <h3>📦 Produtos Extraídos</h3>
+    <div class="row">
+      <button id="refresh">🔄 Atualizar itens</button>
+      <button id="select-all">✅ Selecionar Todos</button>
+      <button id="send-whatsapp">📤 Enviar para WhatsApp</button>
+      <a id="export" href="#">💾 Exportar CSV/JSON/messages</a>
+    </div>
+    <div id="items-table" style="margin-top: 20px;"></div>
+  </div>
+
+  <!-- Modal WhatsApp -->
+  <div id="whatsapp-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📤 Enviar para WhatsApp</h3>
+        <span class="close" id="close-modal">&times;</span>
+      </div>
+      <div>
+        <label><strong>Grupos:</strong></label>
+        <div id="groups-list" class="group-list">Carregando grupos...</div>
+        <button id="load-groups">🔄 Recarregar Grupos</button>
+      </div>
+      <div style="margin-top: 20px;">
+        <label><strong>Template da Mensagem:</strong></label>
+        <small>Placeholders: {'{titulo}'}, {'{preco}'}, {'{link}'}, {'{desconto}'}</small>
+        <textarea id="message-template" placeholder="🔥 *Oferta!*\n\n{'{titulo}'}\n\n💰 Preço: {'{preco}'}\n\n🔗 {'{link}'}"></textarea>
+        <div>
+          <strong>Preview:</strong>
+          <div id="message-preview" class="preview"></div>
+        </div>
+      </div>
+      <div class="row" style="margin-top: 20px;">
+        <button id="send-messages">✅ Enviar Mensagens</button>
+        <button id="cancel-send">❌ Cancelar</button>
+      </div>
+    </div>
+  </div>
+  <pre id="items" style="display:none;"></pre>
+
+  <script src="/static/js/main.js"></script>
+</body>
+</html>
