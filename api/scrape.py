@@ -6,6 +6,12 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from loguru import logger
 
+from api.schemas import (
+    ScrapeStartRequest,
+    ScrapeStartResponse,
+    ScrapeStopResponse,
+    StatusResponse,
+)
 from config import get_settings
 from runner import run_scrape
 from store import Repo
@@ -82,46 +88,38 @@ def create_router() -> APIRouter:
     """Cria router com endpoints de scraping."""
     router = APIRouter()
 
-    @router.post("/scrape/start")
-    async def start_scrape(payload: dict) -> dict:
-        url = payload.get("url")
-        max_items = int(payload.get("max_items", 50))
-        headless = payload.get("headless", True)
-        category = payload.get("category")
-        
-        if not url:
-            raise HTTPException(400, "url é obrigatório")
-        
-        # Limpar URL: remover espaços e caracteres extras
-        url = url.strip()
-        if url.startswith(":"):
-            url = url[1:].strip()
-        if not url.startswith("http"):
-            raise HTTPException(400, f"URL inválida: {url}")
-        
+    @router.post("/scrape/start", response_model=ScrapeStartResponse)
+    async def start_scrape(request: ScrapeStartRequest) -> ScrapeStartResponse:
+        """Inicia um novo scraping."""
         if manager.running:
             raise HTTPException(409, "Scrape em execução")
         
         # Aplicar configuração de headless
         settings = get_settings()
-        settings.headless = headless
+        settings.headless = request.headless
         
-        await manager.start(url=url, max_items=max_items, category=category, settings=settings)
-        return {"ok": True}
+        await manager.start(
+            url=request.url,
+            max_items=request.max_items,
+            category=request.category,
+            settings=settings,
+        )
+        return ScrapeStartResponse(ok=True)
 
-    @router.post("/scrape/stop")
-    async def stop_scrape() -> dict:
+    @router.post("/scrape/stop", response_model=ScrapeStopResponse)
+    async def stop_scrape() -> ScrapeStopResponse:
         """Para o scraping em andamento."""
         try:
             await manager.stop()
-            return {"ok": True}
+            return ScrapeStopResponse(ok=True)
         except Exception as e:
             logger.error(f"Erro ao parar scraping: {e}")
             raise HTTPException(500, f"Erro ao parar: {e}")
 
-    @router.get("/status")
-    async def status() -> dict:
-        return {"running": manager.running, **manager.last_status}
+    @router.get("/status", response_model=StatusResponse)
+    async def status() -> StatusResponse:
+        """Retorna o status atual do scraping."""
+        return StatusResponse(running=manager.running, **manager.last_status)
 
     @router.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:

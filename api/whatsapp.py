@@ -7,6 +7,14 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from loguru import logger
 
+from api.schemas import (
+    TestEndpointRequest,
+    WhatsAppConfigRequest,
+    WhatsAppConfigResponse,
+    WhatsAppGroupResponse,
+    WhatsAppSendRequest,
+    WhatsAppSendResponse,
+)
 from config import get_settings
 from models import MessageTemplate, Product, WhatsAppConfig
 from store import Repo
@@ -17,14 +25,14 @@ def create_router() -> APIRouter:
     """Cria router com endpoints do WhatsApp."""
     router = APIRouter()
 
-    @router.post("/whatsapp/config")
-    async def save_whatsapp_config(payload: dict) -> dict:
+    @router.post("/whatsapp/config", response_model=dict)
+    async def save_whatsapp_config(request: WhatsAppConfigRequest) -> dict:
         """Salva configuração da Evolution API."""
         settings = get_settings()
         config = WhatsAppConfig(
-            base_url=payload.get("base_url", ""),
-            api_key=payload.get("api_key", ""),
-            instance_name=payload.get("instance_name", ""),
+            base_url=request.base_url,
+            api_key=request.api_key,
+            instance_name=request.instance_name,
         )
         
         # Salva em arquivo JSON
@@ -35,18 +43,19 @@ def create_router() -> APIRouter:
         logger.info(f"Configuração WhatsApp salva: {config.instance_name}")
         return {"ok": True}
 
-    @router.get("/whatsapp/config")
-    async def get_whatsapp_config() -> dict:
+    @router.get("/whatsapp/config", response_model=WhatsAppConfigResponse)
+    async def get_whatsapp_config() -> WhatsAppConfigResponse:
         """Retorna configuração salva da Evolution API."""
         settings = get_settings()
         if not settings.whatsapp_config_path.exists():
-            return {"base_url": "", "api_key": "", "instance_name": ""}
+            return WhatsAppConfigResponse(base_url="", api_key="", instance_name="")
         
         with settings.whatsapp_config_path.open("r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+        return WhatsAppConfigResponse(**data)
 
-    @router.get("/whatsapp/groups")
-    async def list_whatsapp_groups() -> list[dict]:
+    @router.get("/whatsapp/groups", response_model=list[WhatsAppGroupResponse])
+    async def list_whatsapp_groups() -> list[WhatsAppGroupResponse]:
         """Lista grupos disponíveis na Evolution API."""
         settings = get_settings()
         if not settings.whatsapp_config_path.exists():
@@ -59,7 +68,7 @@ def create_router() -> APIRouter:
         client = EvolutionAPIClient(config)
         try:
             groups = await client.list_groups()
-            return [{"group_id": g.group_id, "name": g.name} for g in groups]
+            return [WhatsAppGroupResponse(group_id=g.group_id, name=g.name) for g in groups]
         except httpx.HTTPStatusError as e:
             error_msg = f"Erro ao conectar com Evolution API: {e.response.status_code}"
             if e.response.status_code == 401:
@@ -105,27 +114,22 @@ def create_router() -> APIRouter:
             return {"error": str(e), "url": url}
 
     @router.post("/whatsapp/test-endpoint")
-    async def test_endpoint(payload: dict) -> dict:
+    async def test_endpoint(request: TestEndpointRequest) -> dict:
         """Testa um endpoint específico da Evolution API."""
-        url = payload.get("url", "")
-        api_key = payload.get("api_key", "")
-        
-        if not url or not api_key:
-            raise HTTPException(400, "url e api_key são obrigatórios")
         
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
-                    url,
-                    headers={"apikey": api_key, "Content-Type": "application/json"},
+                    request.url,
+                    headers={"apikey": request.api_key, "Content-Type": "application/json"},
                 )
                 return {
                     "status_code": response.status_code,
-                    "url": url,
+                    "url": request.url,
                     "response": response.text[:500],
                 }
         except Exception as e:
-            return {"error": str(e), "url": url, "status_code": 500}
+            return {"error": str(e), "url": request.url, "status_code": 500}
 
     @router.post("/whatsapp/disable-groups-ignore")
     async def disable_groups_ignore() -> dict:
@@ -156,19 +160,12 @@ def create_router() -> APIRouter:
         except Exception as e:
             return {"error": str(e), "url": url}
 
-    @router.post("/whatsapp/send")
-    async def send_whatsapp_messages(payload: dict, background_tasks: BackgroundTasks) -> dict:
+    @router.post("/whatsapp/send", response_model=WhatsAppSendResponse)
+    async def send_whatsapp_messages(
+        request: WhatsAppSendRequest,
+        background_tasks: BackgroundTasks,
+    ) -> WhatsAppSendResponse:
         """Envia produtos para grupos do WhatsApp."""
-        product_ids = payload.get("product_ids", [])
-        group_ids = payload.get("group_ids", [])
-        template_text = payload.get("template", "")
-        
-        if not product_ids:
-            raise HTTPException(400, "product_ids é obrigatório")
-        if not group_ids:
-            raise HTTPException(400, "group_ids é obrigatório")
-        if not template_text:
-            raise HTTPException(400, "template é obrigatório")
         
         # Carrega configuração
         settings = get_settings()
@@ -188,7 +185,7 @@ def create_router() -> APIRouter:
         # Filtra produtos solicitados e cria dict de links compartilhados
         selected_products = []
         product_share_links = {}
-        for pid in product_ids:
+        for pid in request.product_ids:
             if pid in products_dict:
                 p_data = products_dict[pid]
                 # Converte dict para Product
@@ -208,7 +205,7 @@ def create_router() -> APIRouter:
         if not selected_products:
             raise HTTPException(400, "Nenhum produto válido encontrado para os IDs fornecidos")
         
-        template = MessageTemplate(template_text=template_text)
+        template = MessageTemplate(template_text=request.template)
         
         # Envia em background
         async def send_task() -> None:
@@ -224,7 +221,7 @@ def create_router() -> APIRouter:
             
             for product, share_link in products_with_links:
                 message_text = client.format_product_message(product, template, share_link)
-                for group_id in group_ids:
+                for group_id in request.group_ids:
                     success = await client.send_text_message(group_id, message_text)
                     if success:
                         stats["sent"] += 1
@@ -236,6 +233,9 @@ def create_router() -> APIRouter:
         
         background_tasks.add_task(send_task)
         
-        return {"ok": True, "message": f"Enviando {len(selected_products)} produtos para {len(group_ids)} grupos"}
+        return WhatsAppSendResponse(
+            ok=True,
+            message=f"Enviando {len(selected_products)} produtos para {len(request.group_ids)} grupos",
+        )
 
     return router

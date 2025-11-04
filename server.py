@@ -60,4 +60,16 @@ async def favicon() -> dict:
 
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=False)
+    import os
+    
+    # Verifica se está em modo desenvolvimento
+    dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
+    
+    uvicorn.run(
+        "server:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=dev_mode,  # Habilita hot-reload apenas em modo dev
+        reload_dirs=["./api", "./static", "./templates"] if dev_mode else None,
+        reload_includes=["*.py", "*.html", "*.css", "*.js"] if dev_mode else None,
+    )
